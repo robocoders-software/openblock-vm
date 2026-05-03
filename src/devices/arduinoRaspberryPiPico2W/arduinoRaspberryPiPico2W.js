@@ -539,9 +539,9 @@ class OpenBlockArduinoRaspberryPiPico2WDevice {
                     default: 'Pins',
                     description: 'The name of the arduino RaspberryPiPico2W device pin category'
                 }),
-                color1: '#4C97FF',
-                color2: '#3373CC',
-                color3: '#3373CC',
+                color1: '#9966FF',
+                color2: '#774DCB',
+                color3: '#774DCB',
 
                 blocks: [
                     {

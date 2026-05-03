@@ -564,9 +564,9 @@ class OpenBlockArduinoEsp8266Device {
                     default: 'Pins',
                     description: 'The name of the arduino Esp8266 device pin category'
                 }),
-                color1: '#4C97FF',
-                color2: '#3373CC',
-                color3: '#3373CC',
+                color1: '#9966FF',
+                color2: '#774DCB',
+                color3: '#774DCB',
 
                 blocks: [
                     {

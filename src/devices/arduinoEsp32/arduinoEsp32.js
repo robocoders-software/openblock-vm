@@ -773,9 +773,9 @@ class OpenBlockArduinoEsp32Device {
                     default: 'Pins',
                     description: 'The name of the esp32 arduino device pin category'
                 }),
-                color1: '#4C97FF',
-                color2: '#3373CC',
-                color3: '#3373CC',
+                color1: '#9966FF',
+                color2: '#774DCB',
+                color3: '#774DCB',
 
                 blocks: [
                     {
