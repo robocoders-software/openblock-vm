@@ -21,9 +21,32 @@ class Scratch3TeachableMachineBlocks {
         this._topClass     = '';
         this._prevTopClass = '';
 
+        this._audioListening   = false;
+        this._audioTopClass    = '';
+        this._audioPrevTop     = '';
+        this._audioPredictions = [];
+
+        this._lastModelType = undefined; // undefined = never checked yet
+
         if (this.runtime.ioDevices) {
-            this.runtime.on('PROJECT_RUN_STOP', () => this._stopClassifying());
+            this.runtime.on('PROJECT_RUN_STOP', () => this._stopAll());
         }
+
+        this._startModelWatcher();
+    }
+
+    /* ── Watch for model type changes and refresh the block palette ── */
+    _startModelWatcher () {
+        setInterval(() => {
+            const local   = this._getLocalModel();
+            const type    = local ? (local.type || 'image') : null;
+            if (type !== this._lastModelType) {
+                this._lastModelType = type;
+                try {
+                    this.runtime._refreshExtensionPrimitives(this.getInfo());
+                } catch (_) {}
+            }
+        }, 300);
     }
 
     get EXTENSION_ID () { return 'teachableMachine'; }
@@ -64,11 +87,23 @@ class Scratch3TeachableMachineBlocks {
         this._prevTopClass = '';
     }
 
+    _stopAll () {
+        this._stopClassifying();
+        if (this._audioListening) {
+            this._audioListening   = false;
+            this._audioTopClass    = '';
+            this._audioPredictions = [];
+            const local = this._getLocalModel();
+            if (local && local.stopListening) local.stopListening().catch(() => {});
+        }
+    }
+
     _loop () {
         if (!this._isRunning) return;
         setTimeout(() => this._loop(), CLASSIFY_INTERVAL);
         const local = this._getLocalModel();
-        if (local && local.classifier && local.mobileNet) {
+        if (!local || local.type === 'sounds') return; // audio uses callback, not polling
+        if (local.classifier && local.mobileNet) {
             this._runClassification(local);
         }
     }
@@ -163,8 +198,152 @@ class Scratch3TeachableMachineBlocks {
         } catch (_) { return null; }
     }
 
-    /* ── Block definitions ── */
+    /* ── Block definitions (type-aware: only show blocks for the loaded model type) ── */
     getInfo () {
+        const local     = this._getLocalModel();
+        const modelType = local ? (local.type || 'image') : null;
+
+        /* Blocks shown for every model type */
+        const commonBlocks = [
+            '---',
+            {
+                opcode:    'checkModelStatus',
+                blockType: BlockType.BOOLEAN,
+                text:      formatMessage({id: 'teachableMachine.checkModelStatus', default: 'is the model [STATUS] ?'}),
+                arguments: {
+                    STATUS: {type: ArgumentType.STRING, menu: 'STATUS_MENU', defaultValue: 'ready'}
+                }
+            },
+            {
+                opcode:    'modelStatus',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.modelStatus', default: 'model status'})
+            }
+        ];
+
+        /* Image-model blocks */
+        const imageBlocks = [
+            {
+                opcode:    'recogniseLabel',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.recogniseLabel', default: 'recognise image from [SOURCE] (label)'}),
+                arguments: {SOURCE: {type: ArgumentType.STRING, menu: 'SOURCE_MENU', defaultValue: 'web camera'}}
+            },
+            {
+                opcode:    'recogniseConfidence',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.recogniseConfidence', default: 'recognise image from [SOURCE] (confidence %)'}),
+                arguments: {SOURCE: {type: ArgumentType.STRING, menu: 'SOURCE_MENU', defaultValue: 'web camera'}}
+            },
+            '---',
+            {
+                opcode:    'openRecognitionWindow',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.openRecognitionWindow', default: 'start recognition'})
+            },
+            {
+                opcode:    'stopRecognition',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.stopRecognition', default: 'stop recognition'})
+            },
+            {
+                opcode:    'toggleVideo',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.toggleVideo', default: 'turn video [ONOFF] on stage'}),
+                arguments: {ONOFF: {type: ArgumentType.STRING, menu: 'ONOFF_MENU', defaultValue: 'on'}}
+            },
+            '---',
+            {
+                opcode:    'identifiedClass',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.identifiedClass', default: 'identified class'})
+            },
+            {
+                opcode:    'getConfidenceOfClass',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.getConfidenceOfClass', default: 'confidence of class [LABEL] %'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            {
+                opcode:    'isIdentifiedClass',
+                blockType: BlockType.BOOLEAN,
+                text:      formatMessage({id: 'teachableMachine.isIdentifiedClass', default: 'is identified class [LABEL] ?'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            {
+                opcode:    'whenClassIs',
+                blockType: BlockType.HAT,
+                text:      formatMessage({id: 'teachableMachine.whenClassIs', default: 'when [LABEL] is predicted'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            '---',
+            {
+                opcode:    'getLabelName',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.getLabelName', default: 'label [LABEL]'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            '---',
+            {
+                opcode:    'addTrainingImage',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.addTrainingImage', default: 'add training image from [SOURCE] as [LABEL]'}),
+                arguments: {
+                    SOURCE: {type: ArgumentType.STRING, menu: 'SOURCE_MENU', defaultValue: 'web camera'},
+                    LABEL:  {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}
+                }
+            },
+            {
+                opcode:    'trainNewModel',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.trainNewModel', default: 'train new machine learning model'})
+            },
+            {
+                opcode:    'clearTrainingData',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.clearTrainingData', default: 'clear all training data'})
+            },
+            {
+                opcode:    'isTrainingStatus',
+                blockType: BlockType.BOOLEAN,
+                text:      formatMessage({id: 'teachableMachine.isTrainingStatus', default: 'is training [STATUS] ?'}),
+                arguments: {STATUS: {type: ArgumentType.STRING, menu: 'TRAIN_STATUS_MENU', defaultValue: 'ready'}}
+            }
+        ];
+
+        /* Audio-model blocks */
+        const audioBlocks = [
+            {
+                opcode:    'startListening',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.startListening', default: 'start listening'})
+            },
+            {
+                opcode:    'stopListening',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.stopListening', default: 'stop listening'})
+            },
+            {
+                opcode:    'whenSoundIs',
+                blockType: BlockType.HAT,
+                text:      formatMessage({id: 'teachableMachine.whenSoundIs', default: 'when I hear [LABEL]'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            {
+                opcode:    'identifiedSound',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.identifiedSound', default: 'identified sound'})
+            },
+            {
+                opcode:    'soundConfidence',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.soundConfidence', default: 'confidence of sound [LABEL] %'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            }
+        ];
+
+        const typeBlocks = modelType === 'sounds' ? audioBlocks : imageBlocks;
+
         return [{
             id: 'teachableMachine',
             name: formatMessage({
@@ -174,232 +353,7 @@ class Scratch3TeachableMachineBlocks {
             }),
             blockIconURI,
             menuIconURI,
-            blocks: [
-                /* ── One-shot recognition (ML-for-Kids style) ── */
-                {
-                    opcode:    'recogniseLabel',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.recogniseLabel',
-                        default: 'recognise image from [SOURCE] (label)'
-                    }),
-                    arguments: {
-                        SOURCE: {
-                            type:         ArgumentType.STRING,
-                            menu:         'SOURCE_MENU',
-                            defaultValue: 'web camera'
-                        }
-                    }
-                },
-                {
-                    opcode:    'recogniseConfidence',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.recogniseConfidence',
-                        default: 'recognise image from [SOURCE] (confidence %)'
-                    }),
-                    arguments: {
-                        SOURCE: {
-                            type:         ArgumentType.STRING,
-                            menu:         'SOURCE_MENU',
-                            defaultValue: 'web camera'
-                        }
-                    }
-                },
-
-                '---',
-
-                /* ── Continuous recognition ── */
-                {
-                    opcode:    'openRecognitionWindow',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.openRecognitionWindow',
-                        default: 'start recognition'
-                    })
-                },
-                {
-                    opcode:    'stopRecognition',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.stopRecognition',
-                        default: 'stop recognition'
-                    })
-                },
-                {
-                    opcode:    'toggleVideo',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.toggleVideo',
-                        default: 'turn video [ONOFF] on stage'
-                    }),
-                    arguments: {
-                        ONOFF: {
-                            type:         ArgumentType.STRING,
-                            menu:         'ONOFF_MENU',
-                            defaultValue: 'on'
-                        }
-                    }
-                },
-
-                '---',
-
-                /* ── Live result reporters ── */
-                {
-                    opcode:    'identifiedClass',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.identifiedClass',
-                        default: 'identified class'
-                    })
-                },
-                {
-                    opcode:    'getConfidenceOfClass',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.getConfidenceOfClass',
-                        default: 'confidence of class [LABEL] %'
-                    }),
-                    arguments: {
-                        LABEL: {
-                            type:         ArgumentType.STRING,
-                            menu:         'CLASS_LABEL',
-                            defaultValue: 'Class 1'
-                        }
-                    }
-                },
-                {
-                    opcode:    'isIdentifiedClass',
-                    blockType: BlockType.BOOLEAN,
-                    text:      formatMessage({
-                        id:      'teachableMachine.isIdentifiedClass',
-                        default: 'is identified class [LABEL] ?'
-                    }),
-                    arguments: {
-                        LABEL: {
-                            type:         ArgumentType.STRING,
-                            menu:         'CLASS_LABEL',
-                            defaultValue: 'Class 1'
-                        }
-                    }
-                },
-                {
-                    opcode:    'whenClassIs',
-                    blockType: BlockType.HAT,
-                    text:      formatMessage({
-                        id:      'teachableMachine.whenClassIs',
-                        default: 'when [LABEL] is predicted'
-                    }),
-                    arguments: {
-                        LABEL: {
-                            type:         ArgumentType.STRING,
-                            menu:         'CLASS_LABEL',
-                            defaultValue: 'Class 1'
-                        }
-                    }
-                },
-
-                '---',
-
-                /* ── Per-class label reporters (ML-for-Kids pattern) ── */
-                {
-                    opcode:    'getLabelName',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.getLabelName',
-                        default: 'label [LABEL]'
-                    }),
-                    arguments: {
-                        LABEL: {
-                            type:         ArgumentType.STRING,
-                            menu:         'CLASS_LABEL',
-                            defaultValue: 'Class 1'
-                        }
-                    }
-                },
-
-                '---',
-
-                /* ── In-blocks training (ML-for-Kids addTraining / trainNewModel pattern) ── */
-                {
-                    opcode:    'addTrainingImage',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.addTrainingImage',
-                        default: 'add training image from [SOURCE] as [LABEL]'
-                    }),
-                    arguments: {
-                        SOURCE: {
-                            type:         ArgumentType.STRING,
-                            menu:         'SOURCE_MENU',
-                            defaultValue: 'web camera'
-                        },
-                        LABEL: {
-                            type:         ArgumentType.STRING,
-                            menu:         'CLASS_LABEL',
-                            defaultValue: 'Class 1'
-                        }
-                    }
-                },
-                {
-                    opcode:    'trainNewModel',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.trainNewModel',
-                        default: 'train new machine learning model'
-                    })
-                },
-                {
-                    opcode:    'clearTrainingData',
-                    blockType: BlockType.COMMAND,
-                    text:      formatMessage({
-                        id:      'teachableMachine.clearTrainingData',
-                        default: 'clear all training data'
-                    })
-                },
-                {
-                    opcode:    'isTrainingStatus',
-                    blockType: BlockType.BOOLEAN,
-                    text:      formatMessage({
-                        id:      'teachableMachine.isTrainingStatus',
-                        default: 'is training [STATUS] ?'
-                    }),
-                    arguments: {
-                        STATUS: {
-                            type:         ArgumentType.STRING,
-                            menu:         'TRAIN_STATUS_MENU',
-                            defaultValue: 'ready'
-                        }
-                    }
-                },
-
-                '---',
-
-                /* ── Model status (ML-for-Kids checkModelStatus pattern) ── */
-                {
-                    opcode:    'checkModelStatus',
-                    blockType: BlockType.BOOLEAN,
-                    text:      formatMessage({
-                        id:      'teachableMachine.checkModelStatus',
-                        default: 'is the model [STATUS] ?'
-                    }),
-                    arguments: {
-                        STATUS: {
-                            type:         ArgumentType.STRING,
-                            menu:         'STATUS_MENU',
-                            defaultValue: 'ready'
-                        }
-                    }
-                },
-                {
-                    opcode:    'modelStatus',
-                    blockType: BlockType.REPORTER,
-                    text:      formatMessage({
-                        id:      'teachableMachine.modelStatus',
-                        default: 'model status'
-                    })
-                }
-            ],
+            blocks: [...typeBlocks, ...commonBlocks],
             menus: {
                 CLASS_LABEL: {
                     acceptReporters: true,
@@ -549,16 +503,76 @@ class Scratch3TeachableMachineBlocks {
     checkModelStatus (args) {
         const local  = this._getLocalModel();
         const status = Cast.toString(args.STATUS).toLowerCase();
-        if (status === 'ready')      return !!(local && local.classifier && local.mobileNet);
+        if (!local) return status === 'not loaded';
+        if (local.type === 'sounds') {
+            if (status === 'ready')      return local.trainingStatus === 'ready';
+            if (status === 'loading')    return local.trainingStatus === 'loading';
+            /* 'not loaded' */           return false;
+        }
+        if (status === 'ready')      return !!(local.classifier && local.mobileNet);
         if (status === 'loading')    return !!(local && !(local.classifier && local.mobileNet));
-        /* 'not loaded' */           return !local;
+        /* 'not loaded' */           return false;
     }
 
     modelStatus () {
         const local = this._getLocalModel();
-        if (!local)                             return 'no model loaded';
+        if (!local) return 'no model loaded';
+        if (local.type === 'sounds') {
+            return local.trainingStatus === 'ready'
+                ? `ready: ${local.projectName || 'audio model'}`
+                : (local.trainingStatus || 'loading');
+        }
         if (local.classifier && local.mobileNet) return `ready: ${local.projectName || 'model'}`;
         return 'loading';
+    }
+
+    /* ── Audio blocks ── */
+
+    async startListening () {
+        const local = this._getLocalModel();
+        if (!local || local.type !== 'sounds' || !local.startListening) return;
+        if (this._audioListening) return;
+        this._audioListening = true;
+        try {
+            await local.startListening(matches => {
+                this._audioPredictions = matches || [];
+                const top = this._audioPredictions.reduce(
+                    (a, b) => ((a.prob || 0) > (b.prob || 0) ? a : b),
+                    this._audioPredictions[0] || {}
+                );
+                this._audioPrevTop  = this._audioTopClass;
+                this._audioTopClass = top.label || '';
+                if (this._audioTopClass && this._audioTopClass !== this._audioPrevTop) {
+                    this.runtime.startHats('teachableMachine_whenSoundIs', {LABEL: this._audioTopClass});
+                }
+            });
+        } catch (err) {
+            this._audioListening = false;
+            console.error('[ML] startListening:', err);
+        }
+    }
+
+    async stopListening () {
+        if (!this._audioListening) return;
+        this._audioListening   = false;
+        this._audioTopClass    = '';
+        this._audioPredictions = [];
+        const local = this._getLocalModel();
+        if (local && local.stopListening) {
+            try { await local.stopListening(); } catch (_) {}
+        }
+    }
+
+    whenSoundIs (args) {
+        return this._audioTopClass.toLowerCase() === Cast.toString(args.LABEL).toLowerCase();
+    }
+
+    identifiedSound () { return this._audioTopClass; }
+
+    soundConfidence (args) {
+        const label = Cast.toString(args.LABEL).toLowerCase();
+        const match = this._audioPredictions.find(p => (p.label || '').toLowerCase() === label);
+        return match ? Math.round(match.prob || 0) : 0;
     }
 }
 
