@@ -37,16 +37,28 @@ class Scratch3TeachableMachineBlocks {
 
     /* ── Watch for model type changes and refresh the block palette ── */
     _startModelWatcher () {
+        // Immediate refresh after Blockly registers the extension — fixes compressed blocks
+        // on project reload where the extension initialises before window.__openblockMLModel is set.
+        // Use TOOLBOX_EXTENSIONS_NEED_UPDATE so refreshBlocks() runs via extension-manager,
+        // which calls _prepareMenuInfo to convert string menu items to functions first.
+        // Direct _refreshExtensionPrimitives(getInfo()) fails because getInfo() returns
+        // items: 'getClassLabels' (string) which _convertMenuItems cannot .map over.
+        setTimeout(() => {
+            const local = this._getLocalModel();
+            const type  = local ? (local.type || 'image') : null;
+            this._lastModelType = type;
+            try { this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE'); } catch (_) {}
+        }, 150);
+
+        // Poll for model-type changes (image ↔ audio) and refresh blocks accordingly.
         setInterval(() => {
-            const local   = this._getLocalModel();
-            const type    = local ? (local.type || 'image') : null;
+            const local = this._getLocalModel();
+            const type  = local ? (local.type || 'image') : null;
             if (type !== this._lastModelType) {
                 this._lastModelType = type;
-                try {
-                    this.runtime._refreshExtensionPrimitives(this.getInfo());
-                } catch (_) {}
+                try { this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE'); } catch (_) {}
             }
-        }, 300);
+        }, 200);
     }
 
     get EXTENSION_ID () { return 'teachableMachine'; }
@@ -351,12 +363,15 @@ class Scratch3TeachableMachineBlocks {
                 default:     'Machine Learning',
                 description: 'Extension category name'
             }),
+            color1: '#4B4A60',
+            color2: '#ffffff',
+            color3: '#4c97ff',
             blockIconURI,
             menuIconURI,
             blocks: [...typeBlocks, ...commonBlocks],
             menus: {
                 CLASS_LABEL: {
-                    acceptReporters: true,
+                    acceptReporters: false,
                     items: 'getClassLabels'
                 },
                 SOURCE_MENU: {

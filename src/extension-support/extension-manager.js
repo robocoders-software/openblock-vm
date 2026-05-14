@@ -559,7 +559,7 @@ class ExtensionManager {
             dispatch.call(serviceName, 'getInfo')
                 .then(info => {
                     info = this._prepareExtensionInfo(serviceName, info, this.getIdFromServiceName(serviceName));
-                    dispatch.call('runtime', '_refreshExtensionPrimitives', info);
+                    return dispatch.call('runtime', '_refreshExtensionPrimitives', info);
                 })
                 .catch(e => {
                     log.error(`Failed to refresh built-in extension primitives: ${JSON.stringify(e)}`);

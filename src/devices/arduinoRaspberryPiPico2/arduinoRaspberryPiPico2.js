@@ -1,4 +1,4 @@
-const formatMessage = require('format-message');
+﻿const formatMessage = require('format-message');
 
 const ArgumentType = require('../../extension-support/argument-type');
 const BlockType = require('../../extension-support/block-type');
@@ -545,9 +545,9 @@ class OpenBlockArduinoRaspberryPiPico2Device {
                     default: 'Pins',
                     description: 'The name of the arduino RaspberryPiPico2 device pin category'
                 }),
-                color1: '#9966FF',
-                color2: '#774DCB',
-                color3: '#774DCB',
+                color1: '#4C97FF',
+                color2: '#4280D7',
+                color3: '#3373CC',
 
                 blocks: [
                     {

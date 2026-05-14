@@ -113,6 +113,9 @@ class Scratch3ObjectDetectionBlocks {
                 default: 'Object Detection',
                 description: 'Extension name'
             }),
+            color1: '#2c2c54',
+            color2: '#ffffff',
+            color3: '#16163a',
             blockIconURI: blockIconURI,
             menuIconURI: menuIconURI,
             blocks: [
