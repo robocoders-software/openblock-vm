@@ -164,9 +164,23 @@ class Scratch3TeachableMachineBlocks {
     _getStageCanvas () {
         try {
             const renderer = this.runtime.renderer;
-            if (renderer && renderer.canvas) return renderer.canvas;
-        } catch (_) {}
-        return this._getVideoCanvas();
+            if (!renderer || !renderer.canvas) throw new Error('no renderer');
+
+            // Force a fresh render pass so the WebGL drawing buffer has current pixels.
+            // Scratch's renderer does NOT use preserveDrawingBuffer, so we must call
+            // draw() and then immediately copy to a 2D canvas before the browser
+            // clears the buffer on the next composite cycle.
+            if (typeof renderer.draw === 'function') renderer.draw();
+
+            const src = renderer.canvas;
+            const dst = document.createElement('canvas');
+            dst.width  = src.width  || 480;
+            dst.height = src.height || 360;
+            dst.getContext('2d').drawImage(src, 0, 0, dst.width, dst.height);
+            return dst;
+        } catch (_) {
+            return this._getVideoCanvas();
+        }
     }
 
     /* ── Run one classification pass; update state + fire hats ── */
@@ -206,12 +220,17 @@ class Scratch3TeachableMachineBlocks {
         const local = this._getLocalModel();
         if (!local || !local.classifier || !local.mobileNet) return null;
 
-        // Enable video silently if needed so the frame is available
-        try {
-            if (this.runtime.ioDevices && this.runtime.ioDevices.video) {
-                this.runtime.ioDevices.video.enableVideo();
-            }
-        } catch (_) {}
+        // Only enable the webcam when the source is "web camera".
+        // For "stage" source we read the renderer canvas directly — enabling the
+        // webcam here would overlay the live feed on the stage, causing the
+        // classifier to read the camera instead of the backdrop/costumes.
+        if (source !== 'stage') {
+            try {
+                if (this.runtime.ioDevices && this.runtime.ioDevices.video) {
+                    this.runtime.ioDevices.video.enableVideo();
+                }
+            } catch (_) {}
+        }
 
         const canvas = (source === 'stage') ? this._getStageCanvas() : this._getVideoCanvas();
         if (!canvas) return null;
