@@ -29,7 +29,9 @@ class Scratch3TeachableMachineBlocks {
         this._textTopClass    = '';
         this._textPredictions = [];
 
-        this._lastModelType = undefined; // undefined = never checked yet
+        this._lastModelType    = undefined; // undefined = never checked yet
+        this._lastModelKey     = undefined; // projectId:type composite key
+        this._toolboxRefreshTimer = null;  // debounce handle
 
         if (this.runtime.ioDevices) {
             this.runtime.on('PROJECT_RUN_STOP', () => this._stopAll());
@@ -38,7 +40,16 @@ class Scratch3TeachableMachineBlocks {
         this._startModelWatcher();
     }
 
-    /* ── Watch for model type changes and refresh the block palette ── */
+    /* ── Debounced toolbox refresh — collapses multiple rapid model changes into one emit ── */
+    _scheduleToolboxRefresh () {
+        if (this._toolboxRefreshTimer) return; // already pending
+        this._toolboxRefreshTimer = setTimeout(() => {
+            this._toolboxRefreshTimer = null;
+            try { this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE'); } catch (_) {}
+        }, 80);
+    }
+
+    /* ── Watch for model identity/type changes and refresh the block palette ── */
     _startModelWatcher () {
         // Immediate refresh after Blockly registers the extension — fixes compressed blocks
         // on project reload where the extension initialises before window.__openblockMLModel is set.
@@ -48,18 +59,24 @@ class Scratch3TeachableMachineBlocks {
         // items: 'getClassLabels' (string) which _convertMenuItems cannot .map over.
         setTimeout(() => {
             const local = this._getLocalModel();
-            const type  = local ? (local.type || 'image') : null;
+            const type  = local ? (local.type || 'images') : null;
+            const id    = local ? (local.projectId || null) : null;
+            this._lastModelKey  = type ? `${id}:${type}` : null;
             this._lastModelType = type;
-            try { this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE'); } catch (_) {}
+            this._scheduleToolboxRefresh();
         }, 150);
 
-        // Poll for model-type changes (image ↔ audio) and refresh blocks accordingly.
+        // Poll for model identity or type changes and refresh blocks accordingly.
+        // Tracks projectId+type so switching between projects of the same type also refreshes.
         setInterval(() => {
             const local = this._getLocalModel();
-            const type  = local ? (local.type || 'image') : null;
-            if (type !== this._lastModelType) {
+            const type  = local ? (local.type || 'images') : null;
+            const id    = local ? (local.projectId || null) : null;
+            const key   = type ? `${id}:${type}` : null;
+            if (key !== this._lastModelKey) {
+                this._lastModelKey  = key;
                 this._lastModelType = type;
-                try { this.runtime.emit('TOOLBOX_EXTENSIONS_NEED_UPDATE'); } catch (_) {}
+                this._scheduleToolboxRefresh();
             }
         }, 200);
     }
@@ -427,7 +444,8 @@ class Scratch3TeachableMachineBlocks {
 
         const typeBlocks = modelType === 'sounds' ? audioBlocks
             : modelType === 'text' ? textBlocks
-            : imageBlocks;
+            : (modelType === 'image' || modelType === 'images') ? imageBlocks
+            : [];
 
         return [{
             id: 'teachableMachine',
