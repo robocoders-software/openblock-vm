@@ -26,6 +26,9 @@ class Scratch3TeachableMachineBlocks {
         this._audioPrevTop     = '';
         this._audioPredictions = [];
 
+        this._textTopClass    = '';
+        this._textPredictions = [];
+
         this._lastModelType = undefined; // undefined = never checked yet
 
         if (this.runtime.ioDevices) {
@@ -101,6 +104,8 @@ class Scratch3TeachableMachineBlocks {
 
     _stopAll () {
         this._stopClassifying();
+        this._textTopClass    = '';
+        this._textPredictions = [];
         if (this._audioListening) {
             this._audioListening   = false;
             this._audioTopClass    = '';
@@ -114,7 +119,7 @@ class Scratch3TeachableMachineBlocks {
         if (!this._isRunning) return;
         setTimeout(() => this._loop(), CLASSIFY_INTERVAL);
         const local = this._getLocalModel();
-        if (!local || local.type === 'sounds') return; // audio uses callback, not polling
+        if (!local || local.type === 'sounds' || local.type === 'text') return;
         if (local.classifier && local.mobileNet) {
             this._runClassification(local);
         }
@@ -354,7 +359,75 @@ class Scratch3TeachableMachineBlocks {
             }
         ];
 
-        const typeBlocks = modelType === 'sounds' ? audioBlocks : imageBlocks;
+        /* Text-model blocks */
+        const textBlocks = [
+            {
+                opcode:    'classifyText',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.classifyText', default: 'classify [TEXT] (label)'}),
+                arguments: {TEXT: {type: ArgumentType.STRING, defaultValue: 'hello'}}
+            },
+            {
+                opcode:    'classifyTextConfidence',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.classifyTextConfidence', default: 'classify [TEXT] (confidence %)'}),
+                arguments: {TEXT: {type: ArgumentType.STRING, defaultValue: 'hello'}}
+            },
+            '---',
+            {
+                opcode:    'identifiedText',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.identifiedText', default: 'identified text class'})
+            },
+            {
+                opcode:    'getTextConfidence',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.getTextConfidence', default: 'confidence of text class [LABEL] %'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            {
+                opcode:    'isIdentifiedTextClass',
+                blockType: BlockType.BOOLEAN,
+                text:      formatMessage({id: 'teachableMachine.isIdentifiedTextClass', default: 'is identified text class [LABEL] ?'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            {
+                opcode:    'whenTextIs',
+                blockType: BlockType.HAT,
+                text:      formatMessage({id: 'teachableMachine.whenTextIs', default: 'when text classified as [LABEL]'}),
+                arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
+            },
+            '---',
+            {
+                opcode:    'addTrainingText',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.addTrainingText', default: 'add training text [TEXT] as [LABEL]'}),
+                arguments: {
+                    TEXT:  {type: ArgumentType.STRING, defaultValue: 'hello'},
+                    LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}
+                }
+            },
+            {
+                opcode:    'trainNewModel',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.trainNewModel', default: 'train new machine learning model'})
+            },
+            {
+                opcode:    'clearTrainingData',
+                blockType: BlockType.COMMAND,
+                text:      formatMessage({id: 'teachableMachine.clearTrainingData', default: 'clear all training data'})
+            },
+            {
+                opcode:    'isTrainingStatus',
+                blockType: BlockType.BOOLEAN,
+                text:      formatMessage({id: 'teachableMachine.isTrainingStatus', default: 'is training [STATUS] ?'}),
+                arguments: {STATUS: {type: ArgumentType.STRING, menu: 'TRAIN_STATUS_MENU', defaultValue: 'ready'}}
+            }
+        ];
+
+        const typeBlocks = modelType === 'sounds' ? audioBlocks
+            : modelType === 'text' ? textBlocks
+            : imageBlocks;
 
         return [{
             id: 'teachableMachine',
@@ -520,13 +593,18 @@ class Scratch3TeachableMachineBlocks {
         const status = Cast.toString(args.STATUS).toLowerCase();
         if (!local) return status === 'not loaded';
         if (local.type === 'sounds') {
-            if (status === 'ready')      return local.trainingStatus === 'ready';
-            if (status === 'loading')    return local.trainingStatus === 'loading';
-            /* 'not loaded' */           return false;
+            if (status === 'ready')   return local.trainingStatus === 'ready';
+            if (status === 'loading') return local.trainingStatus === 'loading';
+            return false;
         }
-        if (status === 'ready')      return !!(local.classifier && local.mobileNet);
-        if (status === 'loading')    return !!(local && !(local.classifier && local.mobileNet));
-        /* 'not loaded' */           return false;
+        if (local.type === 'text') {
+            if (status === 'ready')   return !!(local.classifyText && local.trainingStatus === 'ready');
+            if (status === 'loading') return local.trainingStatus === 'loading';
+            return false;
+        }
+        if (status === 'ready')   return !!(local.classifier && local.mobileNet);
+        if (status === 'loading') return !!(local && !(local.classifier && local.mobileNet));
+        return false;
     }
 
     modelStatus () {
@@ -535,6 +613,11 @@ class Scratch3TeachableMachineBlocks {
         if (local.type === 'sounds') {
             return local.trainingStatus === 'ready'
                 ? `ready: ${local.projectName || 'audio model'}`
+                : (local.trainingStatus || 'loading');
+        }
+        if (local.type === 'text') {
+            return (local.classifyText && local.trainingStatus === 'ready')
+                ? `ready: ${local.projectName || 'text model'}`
                 : (local.trainingStatus || 'loading');
         }
         if (local.classifier && local.mobileNet) return `ready: ${local.projectName || 'model'}`;
@@ -588,6 +671,68 @@ class Scratch3TeachableMachineBlocks {
         const label = Cast.toString(args.LABEL).toLowerCase();
         const match = this._audioPredictions.find(p => (p.label || '').toLowerCase() === label);
         return match ? Math.round(match.prob || 0) : 0;
+    }
+
+    /* ── Text blocks ── */
+
+    async classifyText (args) {
+        const local = this._getLocalModel();
+        if (!local || local.type !== 'text' || !local.classifyText) return 'unknown';
+        try {
+            const res = await local.classifyText(Cast.toString(args.TEXT));
+            if (!res) return 'unknown';
+            const labels = local.labels || [];
+            this._textPredictions = labels.map((lbl, i) => ({
+                className:   lbl,
+                probability: res.confidences[String(i)] || 0
+            }));
+            this._textTopClass = res.label || '';
+            return this._textTopClass;
+        } catch (_) { return 'unknown'; }
+    }
+
+    async classifyTextConfidence (args) {
+        const local = this._getLocalModel();
+        if (!local || local.type !== 'text' || !local.classifyText) return 0;
+        try {
+            const res = await local.classifyText(Cast.toString(args.TEXT));
+            if (!res) return 0;
+            const labels = local.labels || [];
+            this._textPredictions = labels.map((lbl, i) => ({
+                className:   lbl,
+                probability: res.confidences[String(i)] || 0
+            }));
+            this._textTopClass = res.label || '';
+            const top = this._textPredictions.reduce(
+                (a, b) => a.probability > b.probability ? a : b,
+                this._textPredictions[0]
+            );
+            return top ? Math.round(top.probability * 100) : 0;
+        } catch (_) { return 0; }
+    }
+
+    identifiedText ()          { return this._textTopClass; }
+
+    isIdentifiedTextClass (args) {
+        return this._textTopClass.toLowerCase() === Cast.toString(args.LABEL).toLowerCase();
+    }
+
+    getTextConfidence (args) {
+        const label = Cast.toString(args.LABEL).toLowerCase();
+        const match = this._textPredictions.find(p => p.className.toLowerCase() === label);
+        return match ? Math.round((match.probability || 0) * 100) : 0;
+    }
+
+    whenTextIs (args) {
+        return this._textTopClass.toLowerCase() === Cast.toString(args.LABEL).toLowerCase();
+    }
+
+    async addTrainingText (args) {
+        const local = this._getLocalModel();
+        if (!local || !local._trainingAPI) return;
+        const api = local._trainingAPI.current;
+        if (!api || !api.addTrainingText) return;
+        await api.addTrainingText(Cast.toString(args.LABEL), Cast.toString(args.TEXT));
     }
 }
 
