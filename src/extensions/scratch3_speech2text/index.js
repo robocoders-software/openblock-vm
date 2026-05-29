@@ -487,8 +487,15 @@ class Scratch3Speech2TextBlocks {
             audio: true
         });
 
-        this._audioPromise.then().catch(e => {
-            log.error(`Problem connecting to microphone:  ${e}`);
+        this._audioPromise.catch(e => {
+            log.warn(`Microphone access denied: ${e.name}`);
+            // Immediately resolve any pending Listen-and-Wait blocks with empty string
+            // rather than making them wait for the 10s block timeout.
+            clearTimeout(this._speechTimeoutId);
+            clearTimeout(this._speechFinalResponseTimeout);
+            this._speechTimeoutId = null;
+            this._speechFinalResponseTimeout = null;
+            this._resetListening();
         });
     }
 

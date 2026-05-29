@@ -1122,17 +1122,34 @@ class Runtime extends EventEmitter {
                 categoryInfo.color3 = defaultExtensionColors[2];
             }
 
+            /* Prevent duplicate entries when the extension is re-registered after
+               clearExtensions() clears _loadedExtensions without clearing _blockInfo. */
+            let registeredInfo;
             if (deviceId) {
-                this._deviceBlockInfo.push(categoryInfo);
+                const dup = this._deviceBlockInfo.find(info => info.id === categoryInfo.id);
+                if (dup) {
+                    Object.assign(dup, categoryInfo);
+                    registeredInfo = dup;
+                } else {
+                    this._deviceBlockInfo.push(categoryInfo);
+                    registeredInfo = categoryInfo;
+                }
             } else {
-                this._blockInfo.push(categoryInfo);
+                const dup = this._blockInfo.find(info => info.id === categoryInfo.id);
+                if (dup) {
+                    Object.assign(dup, categoryInfo);
+                    registeredInfo = dup;
+                } else {
+                    this._blockInfo.push(categoryInfo);
+                    registeredInfo = categoryInfo;
+                }
             }
 
-            this._fillExtensionCategory(categoryInfo, category);
+            this._fillExtensionCategory(registeredInfo, category);
 
-            for (const fieldTypeName in categoryInfo.customFieldTypes) {
+            for (const fieldTypeName in registeredInfo.customFieldTypes) {
                 if (category.customFieldTypes.hasOwnProperty(fieldTypeName)) {
-                    const fieldTypeInfo = categoryInfo.customFieldTypes[fieldTypeName];
+                    const fieldTypeInfo = registeredInfo.customFieldTypes[fieldTypeName];
 
                     // Emit events for custom field types from extension
                     this.emit(Runtime.SCRATCH_EXTENSION_FIELD_ADDED, {
@@ -1141,7 +1158,7 @@ class Runtime extends EventEmitter {
                     });
                 }
             }
-            return categoryInfo;
+            return registeredInfo;
         });
         // send original device id but not real deivce id.
         const originalDeviceId = deviceId ? this._device.deviceId : null;
@@ -1383,11 +1400,12 @@ class Runtime extends EventEmitter {
         if (iconURI) {
             blockJSON.extensions = ['scratch_extension'];
             blockJSON.message0 = '%1 %2';
+            const iconSize = blockInfo.blockIconSize || categoryInfo.blockIconSize || 40;
             const iconJSON = {
                 type: 'field_image',
                 src: iconURI,
-                width: 40,
-                height: 40
+                width: iconSize,
+                height: iconSize
             };
             const separatorJSON = {
                 type: 'field_vertical_separator'
