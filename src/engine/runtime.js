@@ -2675,8 +2675,12 @@ class Runtime extends EventEmitter {
      * @param {string} id id of this device extension.
      */
     removeScratchExtension (id) {
-        this._blockInfo.splice(this._blockInfo.indexOf(id), 1);
-        this._loadedScratchExtensions.splice(this._loadedScratchExtensions.indexOf(id), 1);
+        // _blockInfo holds categoryInfo OBJECTS (keyed by .id), so indexOf(id) on the raw id
+        // string returns -1 and splice(-1, 1) would remove the WRONG (last) category. Find by id.
+        const biIdx = this._blockInfo.findIndex(info => info && info.id === id);
+        if (biIdx >= 0) this._blockInfo.splice(biIdx, 1);
+        const lseIdx = this._loadedScratchExtensions.indexOf(id);
+        if (lseIdx >= 0) this._loadedScratchExtensions.splice(lseIdx, 1);
         this.emit(Runtime.SCRATCH_EXTENSION_REMOVED);
     }
 

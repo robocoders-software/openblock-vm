@@ -5,8 +5,12 @@ const formatMessage = require('format-message');
 const Video = require('../../io/video');
 const {loadCostumeFromAsset} = require('../../import/load-costume');
 
-const menuIconSVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="4" cy="7" r="2.5" fill="#FF8C1A"/><circle cx="4" cy="13" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="4" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="10" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="16" r="2.5" fill="#FF8C1A"/><circle cx="16" cy="10" r="2.5" fill="#FF8C1A"/><line x1="6.5" y1="7" x2="7.5" y2="4" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="7" x2="7.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="13" x2="7.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="13" x2="7.5" y2="16" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="4" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="10" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="16" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/></svg>';
-const blockIconSVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="8" cy="14" r="5" fill="#FF8C1A"/><circle cx="8" cy="26" r="5" fill="#FF8C1A"/><circle cx="20" cy="8" r="5" fill="#FF8C1A"/><circle cx="20" cy="20" r="5" fill="#FF8C1A"/><circle cx="20" cy="32" r="5" fill="#FF8C1A"/><circle cx="32" cy="20" r="5" fill="#FF8C1A"/><line x1="13" y1="14" x2="15" y2="8" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="14" x2="15" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="26" x2="15" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="26" x2="15" y2="32" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="8" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="20" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="32" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/></svg>';
+/* NOTE: these SVGs MUST carry explicit width/height (not just viewBox). A data-URI SVG with
+   only a viewBox has NO intrinsic size in Chromium, so the block-icon <image> decodes to width 0,
+   reserves no space, and the block text renders ON TOP of the icon (the "compressed" ML blocks).
+   Explicit width/height gives a definite intrinsic size, fixing it deterministically. */
+const menuIconSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="4" cy="7" r="2.5" fill="#FF8C1A"/><circle cx="4" cy="13" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="4" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="10" r="2.5" fill="#FF8C1A"/><circle cx="10" cy="16" r="2.5" fill="#FF8C1A"/><circle cx="16" cy="10" r="2.5" fill="#FF8C1A"/><line x1="6.5" y1="7" x2="7.5" y2="4" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="7" x2="7.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="13" x2="7.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="6.5" y1="13" x2="7.5" y2="16" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="4" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="10" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/><line x1="12.5" y1="16" x2="13.5" y2="10" stroke="#FF8C1A" stroke-width="1"/></svg>';
+const blockIconSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="8" cy="14" r="5" fill="#FF8C1A"/><circle cx="8" cy="26" r="5" fill="#FF8C1A"/><circle cx="20" cy="8" r="5" fill="#FF8C1A"/><circle cx="20" cy="20" r="5" fill="#FF8C1A"/><circle cx="20" cy="32" r="5" fill="#FF8C1A"/><circle cx="32" cy="20" r="5" fill="#FF8C1A"/><line x1="13" y1="14" x2="15" y2="8" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="14" x2="15" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="26" x2="15" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="13" y1="26" x2="15" y2="32" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="8" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="20" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/><line x1="25" y1="32" x2="27" y2="20" stroke="#FF8C1A" stroke-width="2"/></svg>';
 
 const menuIconURI  = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(menuIconSVG)}`;
 const blockIconURI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(blockIconSVG)}`;
@@ -14,6 +18,20 @@ const blockIconURI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(bloc
 
 const CLASSIFY_INTERVAL = 200;
 const DIMENSIONS        = [480, 360];
+
+/* Display safety net: collapse a label that is a unit repeated ≥3 times (e.g. a corrupted
+   "PositivePositivePositive…") back to the unit, so the palette never shows a mangled name.
+   ≥3 repetitions of a multi-char unit is virtually never a real class name. */
+const collapseRepeats = s => {
+    if (typeof s !== 'string' || s.length < 3) return s;
+    for (let p = 1; p <= Math.floor(s.length / 3); p++) {
+        if (s.length % p !== 0) continue;
+        const unit  = s.slice(0, p);
+        const times = s.length / p;
+        if (times >= 3 && unit.repeat(times) === s) return unit;
+    }
+    return s;
+};
 
 class Scratch3TeachableMachineBlocks {
     constructor (runtime) {
@@ -89,13 +107,69 @@ class Scratch3TeachableMachineBlocks {
         return (typeof window !== 'undefined' && window.__openblockMLModel) || null;
     }
 
-    /* ── Dynamic label menu (reads live from loaded model) ── */
+    /* ── Infer the project's ML type from the placed blocks (SAFE) ──
+       Used when NO model is loaded (deleted, or a .rc with no model reference) so the palette
+       shows the project's OWN type instead of defaulting to the image-led union.
+       SAFETY: only returns a type when the project is UNAMBIGUOUSLY one type (distinctive
+       opcodes of exactly one kind present). For mixed/none it returns null → getInfo registers
+       the FULL union, so no saved block can ever be dropped during deserialization. */
+    _inferModelTypeFromWorkspace () {
+        try {
+            const targets = this.runtime && this.runtime.targets;
+            if (!targets || !targets.length) return null;
+            const TEXT = new Set([
+                'recogniseText', 'recogniseTextConfidence', 'classifyText',
+                'classifyTextConfidence', 'addTrainingText'
+            ]);
+            const SOUND = new Set([
+                'startListening', 'stopListening', 'whenSoundIs',
+                'identifiedSound', 'soundConfidence'
+            ]);
+            const IMAGE = new Set([
+                'recogniseLabel', 'recogniseConfidence', 'openRecognitionWindow',
+                'stopRecognition', 'toggleVideo', 'identifiedClass', 'getConfidenceOfClass',
+                'isIdentifiedClass', 'whenClassIs', 'addTrainingImage', 'getCostumeImage',
+                'getBackdropImage', 'getWebcamImage', 'saveScreenshotToCostume'
+            ]);
+            let text = 0, sound = 0, image = 0;
+            for (const t of targets) {
+                const blocks = t.blocks && t.blocks._blocks;
+                if (!blocks) continue;
+                for (const id in blocks) {
+                    const op = (blocks[id] && blocks[id].opcode) || '';
+                    // Stored opcodes are prefixed (e.g. 'teachableMachine_startListening',
+                    // 'mlImages_getCostumeImage') — compare the bare opcode after the prefix.
+                    const bare = op.indexOf('_') >= 0 ? op.slice(op.indexOf('_') + 1) : op;
+                    if (TEXT.has(bare)) text++;
+                    else if (SOUND.has(bare)) sound++;
+                    else if (IMAGE.has(bare)) image++;
+                }
+            }
+            const kinds = (text > 0 ? 1 : 0) + (sound > 0 ? 1 : 0) + (image > 0 ? 1 : 0);
+            if (kinds !== 1) return null; // none or mixed → union (safe, nothing dropped)
+            if (text)  return 'text';
+            if (sound) return 'sounds';
+            return 'images';
+        } catch (_) { return null; }
+    }
+
+    /* ── Dynamic label menu (reads live from loaded model) ──
+       MUST return [humanReadable, languageNeutral] PAIRS, not {text,value} objects.
+       scratch-blocks' FieldDropdown reads options[i][0]/[1] directly for a dynamic
+       menuGenerator (the function result is used raw — it does NOT pass through the VM's
+       _convertMenuItems, which only converts STATIC arrays). Returning objects made
+       options[i][1] undefined, so value-matching always failed and the field fell back to
+       displaying its raw stored value — which then corrupted (e.g. "Positive" repeated). */
     getClassLabels () {
         const local = this._getLocalModel();
         if (local && local.labels && local.labels.length > 0) {
-            return local.labels.map(l => ({text: l, value: l}));
+            // '_background_noise_' is an INTERNAL sound-training class — never user-selectable.
+            const usable = local.labels.filter(l => l !== '_background_noise_');
+            if (usable.length > 0) {
+                return usable.map(l => { const c = collapseRepeats(l); return [c, c]; });
+            }
         }
-        return [{text: 'Class 1', value: 'Class 1'}, {text: 'Class 2', value: 'Class 2'}];
+        return [['Class 1', 'Class 1'], ['Class 2', 'Class 2']];
     }
 
     /* ── Continuous recognition loop ── */
@@ -418,8 +492,11 @@ class Scratch3TeachableMachineBlocks {
 
     /* ── Block definitions (type-aware: only show blocks for the loaded model type) ── */
     getInfo () {
-        const local        = this._getLocalModel();
-        const modelType    = local ? (local.type || 'image') : null;
+        const local = this._getLocalModel();
+        // Type from the loaded model; else infer (SAFELY) from the placed blocks so a model-less
+        // project shows its OWN type instead of the image-led union. Inference returns null for
+        // mixed/empty projects → union is registered (no blocks dropped).
+        const modelType    = (local ? (local.type || 'images') : null) || this._inferModelTypeFromWorkspace();
         const isImageModel = (modelType === 'image' || modelType === 'images');
 
         /* Blocks shown for every model type */
@@ -440,9 +517,10 @@ class Scratch3TeachableMachineBlocks {
             }
         ];
 
-        /* Per-label reporter blocks — shared between image and text models */
+        /* Per-label reporter blocks — shared between image and text models.
+           Run labels through collapseRepeats so a corrupted "XXXX…" name never appears. */
         const allLabels = (local && local.labels && local.labels.length > 0)
-            ? local.labels : ['Class 1', 'Class 2'];
+            ? local.labels.map(collapseRepeats) : ['Class 1', 'Class 2'];
         allLabels.forEach((label, idx) => { this[`returnLabel_${idx}`] = () => label; });
         const labelReturnBlocks = allLabels.map((label, idx) => ({
             opcode:    `returnLabel_${idx}`,
@@ -542,7 +620,12 @@ class Scratch3TeachableMachineBlocks {
             color1: '#0BBF8A',
             color2: '#09A87A',
             color3: '#07916A',
-            blocks: modelType ? [
+            // These image-source utility blocks (costume / backdrop / webcam image, save
+            // screenshot) are ALWAYS available — for image, sound AND text projects. They are
+            // general-purpose image helpers, not tied to the model type, so they must stay
+            // visible regardless. (Always registering them also guarantees an image project's
+            // "recognise image [costume image]" nested block reconstructs during deserialize.)
+            blocks: [
                 {
                     opcode:    'getCostumeImage',
                     blockType: BlockType.REPORTER,
@@ -563,7 +646,7 @@ class Scratch3TeachableMachineBlocks {
                     blockType: BlockType.REPORTER,
                     text:      formatMessage({id: 'teachableMachine.getWebcamImage', default: 'webcam image'})
                 }
-            ] : [],
+            ],
             menus: {}
         };
 
@@ -638,10 +721,27 @@ class Scratch3TeachableMachineBlocks {
             }
         ];
 
-        const typeBlocks = modelType === 'sounds' ? audioBlocks
-            : modelType === 'text' ? textBlocks
-            : isImageModel ? imageBlocks
-            : [];
+        let typeBlocks;
+        if (modelType) {
+            // Type known (from the loaded model OR safely inferred from the placed blocks) —
+            // show only that type's blocks, matching the project's actual model type.
+            typeBlocks = modelType === 'sounds' ? audioBlocks
+                : modelType === 'text' ? textBlocks
+                : isImageModel ? imageBlocks
+                : [];
+        } else {
+            // Type unknown — no model AND the placed ML blocks are mixed/none. Register the
+            // UNION of every type's blocks (deduped by opcode) so any saved ML block always has
+            // a definition and is NOT dropped during deserialization. Once a model loads or the
+            // project resolves to a single type, getInfo re-runs and narrows the palette.
+            const seen = new Set();
+            typeBlocks = [...imageBlocks, ...audioBlocks, ...textBlocks].filter(b => {
+                if (!b || b === '---' || !b.opcode) return false;
+                if (seen.has(b.opcode)) return false;
+                seen.add(b.opcode);
+                return true;
+            });
+        }
 
         const categoryName = (local && local.projectName)
             ? local.projectName
@@ -704,8 +804,9 @@ class Scratch3TeachableMachineBlocks {
             }
         };
 
-        /* Always register both categories so _blockInfo stays stable;
-           imagesCategoryInfo.blocks is empty for non-image models so the runtime hides it */
+        /* Both categories are always present. The Images helper category's blocks (costume/
+           backdrop/webcam image, save screenshot) are general-purpose and shown for image,
+           sound AND text projects alike. */
         return [imagesCategoryInfo, mlCategory];
     }
 
