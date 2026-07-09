@@ -724,7 +724,7 @@ class OpenBlockArduinoLeonardoDevice {
                         arguments: {
                             VALUE: {
                                 type: ArgumentType.STRING,
-                                defaultValue: 'Hello OpenBlock'
+                                defaultValue: 'Hello RoboCoders'
                             },
                             EOL: {
                                 type: ArgumentType.STRING,

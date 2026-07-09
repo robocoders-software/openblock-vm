@@ -651,7 +651,7 @@ class OpenBlockMicrobitDevice {
                     arguments: {
                         TEXT: {
                             type: ArgumentType.STRING,
-                            defaultValue: 'Hello OpenBlock'
+                            defaultValue: 'Hello RoboCoders'
                         }
                     }
                 },
@@ -666,7 +666,7 @@ class OpenBlockMicrobitDevice {
                     arguments: {
                         TEXT: {
                             type: ArgumentType.STRING,
-                            defaultValue: 'Hello OpenBlock'
+                            defaultValue: 'Hello RoboCoders'
                         }
                     }
                 },
@@ -928,7 +928,7 @@ class OpenBlockMicrobitDevice {
                     arguments: {
                         TEXT: {
                             type: ArgumentType.STRING,
-                            defaultValue: 'Hello OpenBlock'
+                            defaultValue: 'Hello RoboCoders'
                         }
                     }
                 },
@@ -988,7 +988,7 @@ class OpenBlockMicrobitDevice {
                     arguments: {
                         TEXT: {
                             type: ArgumentType.STRING,
-                            defaultValue: 'Hello OpenBlock'
+                            defaultValue: 'Hello RoboCoders'
                         }
                     }
                 }

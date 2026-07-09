@@ -161,15 +161,20 @@ class Scratch3TeachableMachineBlocks {
        options[i][1] undefined, so value-matching always failed and the field fell back to
        displaying its raw stored value — which then corrupted (e.g. "Positive" repeated). */
     getClassLabels () {
+        // MUST return plain STRINGS (or {text,value} objects) — NOT [text,value] array pairs.
+        // This is a dynamic menu, so the VM's _getExtensionMenuItems wraps each returned item
+        // into a [display,value] pair itself: a string → [s,s], an object → [text,value]. If we
+        // return an ARRAY it's typeof 'object', so it reads item.text/item.value (both undefined)
+        // → every menu entry renders BLANK. Return strings and let the VM pair them.
         const local = this._getLocalModel();
         if (local && local.labels && local.labels.length > 0) {
             // '_background_noise_' is an INTERNAL sound-training class — never user-selectable.
             const usable = local.labels.filter(l => l !== '_background_noise_');
             if (usable.length > 0) {
-                return usable.map(l => { const c = collapseRepeats(l); return [c, c]; });
+                return usable.map(l => collapseRepeats(l));
             }
         }
-        return [['Class 1', 'Class 1'], ['Class 2', 'Class 2']];
+        return ['Class 1', 'Class 2'];
     }
 
     /* ── Continuous recognition loop ── */

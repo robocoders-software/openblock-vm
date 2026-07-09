@@ -1098,7 +1098,7 @@ class OpenBlockArduinoMega2560Device {
                             },
                             VALUE: {
                                 type: ArgumentType.STRING,
-                                defaultValue: 'Hello OpenBlock'
+                                defaultValue: 'Hello RoboCoders'
                             },
                             EOL: {
                                 type: ArgumentType.STRING,

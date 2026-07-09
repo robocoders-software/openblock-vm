@@ -272,6 +272,15 @@ class ExtensionManager {
     unloadExtension (extensionURL) {
         this._loadedExtensions.delete(extensionURL);
         this.runtime.removeScratchExtension(extensionURL);
+        // The teachableMachine (ML) extension registers a SECOND helper category in its getInfo —
+        // 'mlImages' (the Images blocks: costume/backdrop/webcam image, save screenshot). Its id
+        // differs from the extension id, so removeScratchExtension(extensionURL) above leaves the
+        // Images category orphaned in the toolbox. Remove it here too, so unloading ML ALWAYS
+        // removes its Images helper — covering every unload path (new project, ML tab close,
+        // discard, project load) from one place instead of each caller remembering to do it.
+        if (extensionURL === 'teachableMachine') {
+            this.runtime.removeScratchExtension('mlImages');
+        }
     }
 
     /**
