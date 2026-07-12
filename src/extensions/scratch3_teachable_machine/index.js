@@ -19,6 +19,12 @@ const blockIconURI = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(bloc
 const CLASSIFY_INTERVAL = 200;
 const DIMENSIONS        = [480, 360];
 
+/* Minimum top confidence (%) for a one-shot "recognise sound (label)" to assert a class.
+   Below this the audio was ambiguous/ambient, so the block reports 'unknown' instead of
+   forcing an argmax. The "(confidence)" block is NOT gated — it always reports the real %,
+   so a project can build its own threshold logic. Tune here if too strict/lenient. */
+const ONESHOT_MIN_CONFIDENCE = 50;
+
 /* Display safety net: collapse a label that is a unit repeated ≥3 times (e.g. a corrupted
    "PositivePositivePositive…") back to the unit, so the palette never shows a mangled name.
    ≥3 repetitions of a multi-char unit is virtually never a real class name. */
@@ -55,6 +61,9 @@ class Scratch3TeachableMachineBlocks {
 
         if (this.runtime.ioDevices) {
             this.runtime.on('PROJECT_RUN_STOP', () => this._stopAll());
+            // The red Stop button emits PROJECT_STOP_ALL — bind it too so the mic/camera are
+            // released the instant the user stops, not only when the last thread drains.
+            this.runtime.on('PROJECT_STOP_ALL', () => this._stopAll());
         }
 
         this._startModelWatcher();
@@ -203,12 +212,14 @@ class Scratch3TeachableMachineBlocks {
         this._stopClassifying();
         this._textTopClass    = '';
         this._textPredictions = [];
-        if (this._audioListening) {
-            this._audioListening   = false;
-            this._audioTopClass    = '';
-            this._audioPredictions = [];
-            const local = this._getLocalModel();
-            if (local && local.stopListening) local.stopListening().catch(() => {});
+        this._audioListening   = false;
+        this._audioTopClass    = '';
+        this._audioPredictions = [];
+        // Force the mic off on Stop for ANY sound model — this covers a one-shot capture that
+        // is mid-flight (not tracked by _audioListening), so the mic never lingers after Stop.
+        const audioLocal = this._getLocalModel();
+        if (audioLocal && audioLocal.type === 'sounds' && audioLocal.stopListening) {
+            audioLocal.stopListening().catch(() => {});
         }
         // Turn off the camera when the project stops so the webcam isn't left open
         try {
@@ -522,10 +533,14 @@ class Scratch3TeachableMachineBlocks {
             }
         ];
 
-        /* Per-label reporter blocks — shared between image and text models.
-           Run labels through collapseRepeats so a corrupted "XXXX…" name never appears. */
-        const allLabels = (local && local.labels && local.labels.length > 0)
-            ? local.labels.map(collapseRepeats) : ['Class 1', 'Class 2'];
+        /* Per-label reporter blocks — shared between image, text and sound models.
+           Run labels through collapseRepeats so a corrupted "XXXX…" name never appears.
+           '_background_noise_' is an INTERNAL sound-training class — filter it out so it never
+           appears as a user-facing class reporter block (matches getClassLabels). */
+        const usableLabels = (local && local.labels && local.labels.length > 0)
+            ? local.labels.filter(l => l !== '_background_noise_') : [];
+        const allLabels = usableLabels.length > 0
+            ? usableLabels.map(collapseRepeats) : ['Class 1', 'Class 2'];
         allLabels.forEach((label, idx) => { this[`returnLabel_${idx}`] = () => label; });
         const labelReturnBlocks = allLabels.map((label, idx) => ({
             opcode:    `returnLabel_${idx}`,
@@ -658,6 +673,17 @@ class Scratch3TeachableMachineBlocks {
         /* Audio-model blocks */
         const audioBlocks = [
             {
+                opcode:    'recogniseSound',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.recogniseSound', default: 'recognise sound (label)'})
+            },
+            {
+                opcode:    'recogniseSoundConfidence',
+                blockType: BlockType.REPORTER,
+                text:      formatMessage({id: 'teachableMachine.recogniseSoundConfidence', default: 'recognise sound (confidence)'})
+            },
+            '---',
+            {
                 opcode:    'startListening',
                 blockType: BlockType.COMMAND,
                 text:      formatMessage({id: 'teachableMachine.startListening', default: 'start listening'})
@@ -683,7 +709,11 @@ class Scratch3TeachableMachineBlocks {
                 blockType: BlockType.REPORTER,
                 text:      formatMessage({id: 'teachableMachine.soundConfidence', default: 'confidence of sound [LABEL] %'}),
                 arguments: {LABEL: {type: ArgumentType.STRING, menu: 'CLASS_LABEL', defaultValue: 'Class 1'}}
-            }
+            },
+            '---',
+            /* Per-class reporter blocks (e.g. Happy / Sad) — same as the text project.
+               Handlers (returnLabel_N) are always assigned above regardless of model type. */
+            ...labelReturnBlocks
         ];
 
         /* Text-model blocks — ML for Kids style (reuses labelReturnBlocks from above) */
@@ -1060,6 +1090,59 @@ class Scratch3TeachableMachineBlocks {
     }
 
     identifiedSound () { return this._audioTopClass; }
+
+    /* One-shot: record ~1s from the mic and classify it, returning the top label.
+       "Support both" behaviour: if a continuous `start listening` loop is already running,
+       the mic is busy — reuse its latest live result instead of opening a conflicting
+       capture. Otherwise do a fresh one-shot recognition via the ML Studio engine. */
+    async recogniseSound (args, util) {
+        const local = this._getLocalModel();
+        if (!local || local.type !== 'sounds') return 'unknown';
+        // A checked reporter is re-evaluated by the VM every frame, forever, regardless of the
+        // green flag / Stop button. NEVER open the mic for a monitor poll — that would keep the
+        // microphone on in the background after the program is stopped. Show the last value.
+        if (util && util.thread && util.thread.updateMonitor) return this._audioTopClass || 'unknown';
+        if (this._audioListening) return this._audioTopClass || 'unknown';
+        if (!local.recogniseSoundOnce) return 'unknown';
+        try {
+            const matches = await local.recogniseSoundOnce();
+            if (!matches || matches.length === 0) return 'unknown';
+            this._audioPredictions = matches;
+            // Don't assert a class we're not confident about (ambient/ambiguous audio).
+            if ((matches[0].prob || 0) < ONESHOT_MIN_CONFIDENCE) return 'unknown';
+            this._audioTopClass = matches[0].label || '';
+            return this._audioTopClass;
+        } catch (err) {
+            console.error('[ML] recogniseSound:', err);
+            return 'unknown';
+        }
+    }
+
+    /* One-shot confidence of the top class (0-100), mirroring recogniseTextConfidence. */
+    async recogniseSoundConfidence (args, util) {
+        const local = this._getLocalModel();
+        if (!local || local.type !== 'sounds') return 0;
+        // Never open the mic for a monitor poll (see recogniseSound) — report the last value.
+        if (util && util.thread && util.thread.updateMonitor) {
+            const t = this._audioPredictions[0];
+            return t ? Math.round(t.prob || 0) : 0;
+        }
+        if (this._audioListening) {
+            const top = this._audioPredictions[0];
+            return top ? Math.round(top.prob || 0) : 0;
+        }
+        if (!local.recogniseSoundOnce) return 0;
+        try {
+            const matches = await local.recogniseSoundOnce();
+            if (!matches || matches.length === 0) return 0;
+            this._audioPredictions = matches;
+            this._audioTopClass    = matches[0].label || '';
+            return Math.round(matches[0].prob || 0);
+        } catch (err) {
+            console.error('[ML] recogniseSoundConfidence:', err);
+            return 0;
+        }
+    }
 
     soundConfidence (args) {
         const label = Cast.toString(args.LABEL).toLowerCase();
