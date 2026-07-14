@@ -47,10 +47,19 @@ class Scratch3TeachableMachineBlocks {
         this._topClass     = '';
         this._prevTopClass = '';
 
+        /* CONTINUOUS listener state — owned exclusively by `start listening`. Only the live
+           listen() callback writes these; `identified sound` / `when I hear` read them. */
         this._audioListening   = false;
         this._audioTopClass    = '';
         this._audioPrevTop     = '';
         this._audioPredictions = [];
+
+        /* ONE-SHOT state — owned exclusively by `recognise sound (label)/(confidence)`.
+           Kept SEPARATE from the continuous state above: sharing them made a one-shot leak
+           into `identified sound`, and made the label monitor freeze on a stale class while
+           the confidence monitor kept updating. */
+        this._oneShotTopClass    = '';
+        this._oneShotPredictions = [];
 
         this._textTopClass    = '';
         this._textPredictions = [];
@@ -212,9 +221,11 @@ class Scratch3TeachableMachineBlocks {
         this._stopClassifying();
         this._textTopClass    = '';
         this._textPredictions = [];
-        this._audioListening   = false;
-        this._audioTopClass    = '';
-        this._audioPredictions = [];
+        this._audioListening     = false;
+        this._audioTopClass      = '';
+        this._audioPredictions   = [];
+        this._oneShotTopClass    = '';
+        this._oneShotPredictions = [];
         // Force the mic off on Stop for ANY sound model — this covers a one-shot capture that
         // is mid-flight (not tracked by _audioListening), so the mic never lingers after Stop.
         const audioLocal = this._getLocalModel();
@@ -1101,17 +1112,26 @@ class Scratch3TeachableMachineBlocks {
         // A checked reporter is re-evaluated by the VM every frame, forever, regardless of the
         // green flag / Stop button. NEVER open the mic for a monitor poll — that would keep the
         // microphone on in the background after the program is stopped. Show the last value.
-        if (util && util.thread && util.thread.updateMonitor) return this._audioTopClass || 'unknown';
+        if (util && util.thread && util.thread.updateMonitor) return this._oneShotTopClass || 'unknown';
+        // A continuous listener owns the mic — read its live snapshot instead of competing.
         if (this._audioListening) return this._audioTopClass || 'unknown';
         if (!local.recogniseSoundOnce) return 'unknown';
         try {
             const matches = await local.recogniseSoundOnce();
-            if (!matches || matches.length === 0) return 'unknown';
-            this._audioPredictions = matches;
-            // Don't assert a class we're not confident about (ambient/ambiguous audio).
-            if ((matches[0].prob || 0) < ONESHOT_MIN_CONFIDENCE) return 'unknown';
-            this._audioTopClass = matches[0].label || '';
-            return this._audioTopClass;
+            if (!matches || matches.length === 0) {
+                this._oneShotTopClass    = '';
+                this._oneShotPredictions = [];
+                return 'unknown';
+            }
+            this._oneShotPredictions = matches;
+            // Don't assert a class we're not confident about (ambient/ambiguous audio). Clear
+            // the remembered class too, so the monitor can't keep showing a stale old label.
+            if ((matches[0].prob || 0) < ONESHOT_MIN_CONFIDENCE) {
+                this._oneShotTopClass = '';
+                return 'unknown';
+            }
+            this._oneShotTopClass = matches[0].label || '';
+            return this._oneShotTopClass;
         } catch (err) {
             console.error('[ML] recogniseSound:', err);
             return 'unknown';
@@ -1124,9 +1144,10 @@ class Scratch3TeachableMachineBlocks {
         if (!local || local.type !== 'sounds') return 0;
         // Never open the mic for a monitor poll (see recogniseSound) — report the last value.
         if (util && util.thread && util.thread.updateMonitor) {
-            const t = this._audioPredictions[0];
+            const t = this._oneShotPredictions[0];
             return t ? Math.round(t.prob || 0) : 0;
         }
+        // A continuous listener owns the mic — read its live snapshot instead of competing.
         if (this._audioListening) {
             const top = this._audioPredictions[0];
             return top ? Math.round(top.prob || 0) : 0;
@@ -1134,9 +1155,11 @@ class Scratch3TeachableMachineBlocks {
         if (!local.recogniseSoundOnce) return 0;
         try {
             const matches = await local.recogniseSoundOnce();
-            if (!matches || matches.length === 0) return 0;
-            this._audioPredictions = matches;
-            this._audioTopClass    = matches[0].label || '';
+            if (!matches || matches.length === 0) {
+                this._oneShotPredictions = [];
+                return 0;
+            }
+            this._oneShotPredictions = matches;
             return Math.round(matches[0].prob || 0);
         } catch (err) {
             console.error('[ML] recogniseSoundConfidence:', err);
@@ -1144,9 +1167,17 @@ class Scratch3TeachableMachineBlocks {
         }
     }
 
+    /* Most recent scores from EITHER path — the live listener when it's running, otherwise the
+       last one-shot. Lets "confidence of sound [LABEL]" work in both workflows. */
+    _currentPredictions () {
+        if (this._audioListening && this._audioPredictions.length) return this._audioPredictions;
+        if (this._oneShotPredictions.length) return this._oneShotPredictions;
+        return this._audioPredictions;
+    }
+
     soundConfidence (args) {
         const label = Cast.toString(args.LABEL).toLowerCase();
-        const match = this._audioPredictions.find(p => (p.label || '').toLowerCase() === label);
+        const match = this._currentPredictions().find(p => (p.label || '').toLowerCase() === label);
         return match ? Math.round(match.prob || 0) : 0;
     }
 
